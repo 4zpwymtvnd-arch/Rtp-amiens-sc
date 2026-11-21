@@ -111,6 +111,12 @@ table.l tr.click:active{background:#f4f4f4}
 .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}
 .ccard{display:flex;gap:12px;background:#fff;border:1px solid var(--gris1);border-radius:12px;padding:12px;cursor:pointer;align-items:flex-start}
 .ccard:active{background:#f4f4f4}
+.bars{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.bar{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;font-size:13px}
+.bar .bl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .bt{display:flex;height:14px;background:var(--gris1);border-radius:4px;overflow:hidden}
+.bar .bt i{display:block;height:100%}
+.bar .bv{font-variant-numeric:tabular-nums;color:var(--gris4);white-space:nowrap}
 .zgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px}
 .zone{background:#fff;border:1px solid var(--gris1);border-radius:12px;padding:12px 14px}
 .zone h3{font-size:18px;display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -570,7 +576,7 @@ function gravite(n){ if(n==null) return ''; if(n<=3) return 'minime (1-3 j)'; if
 function go(h){ location.hash = h; }
 window.addEventListener('hashchange', render);
 function nav(active){
-  const it=[['#/','Joueurs','j'],['#/cartes','Cartes médicales','c'],['#/episodes','Blessés en cours','e'],['#/reglages','Sauvegarde et réglages','r']];
+  const it=[['#/','Joueurs','j'],['#/cartes','Cartes médicales','c'],['#/episodes','Blessés en cours','e'],['#/blessures','Suivi blessures','b'],['#/reglages','Sauvegarde et réglages','r']];
   $('#nav').innerHTML = it.map(([h,l,k])=>`<a href="${h}" class="${active===k?'on':''}">${l}</a>`).join('');
 }
 function render(){
@@ -583,6 +589,8 @@ function render(){
   if(p[0]==='episodes') return vEpisodes();
   if(p[0]==='cartes') return vCartes();
   if(p[0]==='carte' && getJ(p[1]) && (db.cartes||{})[p[1]]) return vCarte(getJ(p[1]));
+  if(p[0]==='blessures'){ filtreB.vue = p[1]==='joueurs'?'joueurs':'tdb'; return vBlessures(); }
+  if(p[0]==='histo' && db.blessures && db.blessures.joueurs[decodeURIComponent(p[1]||'')]) return vHisto(decodeURIComponent(p[1]));
   if(p[0]==='reglages') return vReglages();
   return vJoueurs();
 }
@@ -647,6 +655,7 @@ function vJoueur(j){
   ${eps.length ? `<table class="l"><thead><tr><th>Bilan</th><th>Date</th><th>Côté</th><th>Étape</th><th>Absence</th></tr></thead><tbody>
   ${eps.map(e=>{ const n = days(e.dateBlessure, e.dateRetour || today()); return `<tr class="click" data-go="#/episode/${e.id}"><td><b>${CAT_LAB[e.categorie]}</b>${e.recidive?' '+chip('line','récidive'):''}</td><td>${fdate(e.dateBlessure)}</td><td>${e.cote==='G'?'Gauche':'Droit'}</td><td>${e.etapeActuelle||0} · ${esc(ETAPES[e.etapeActuelle||0])}</td><td>${e.dateRetour ? `${n} j · ${gravite(n)}` : `${chip('dark','en cours')} J+${n}`}</td></tr>`; }).join('')}
   </tbody></table>` : `<div class="empty">Aucune blessure enregistrée.</div>`}
+  ${blocBlessuresJoueur(j)}
   <div class="secbar"><h2>Valeurs de référence</h2></div>
   ${vRefsJoueur(j)}
   <div class="secbar"><h2>Zone sensible</h2></div>
@@ -756,8 +765,9 @@ function vSeance(se){
       <p class="small muted" style="margin:10px 0 0">Côté lésé : <b>${lese==='G'?'gauche':'droit'}</b> (repéré en noir). Douleur non renseignée = 0. Tout est enregistré automatiquement sur cet iPad.</p></div>
       <div class="card">
         <div class="row"><h3 style="font-size:19px;flex:1">Dictée du bilan</h3><button class="micb" data-rec="dic-g">${MIC} Dicter</button></div>
-        <p class="small muted" style="margin:6px 0">Dis le nom du test, puis le côté et les valeurs. Ex. : « single hop gauche 180 droite 168 douleur 0 · side hop gauche 48 droite 41 · ACL-RSI 68 ».${SR?'':' Sur cet appareil, touche la zone de texte puis le micro du clavier.'}</p>
-        <textarea id="dic-g" placeholder="Texte dicté…"></textarea>
+        <p class="small muted" style="margin:6px 0">Dis le nom du test, puis le côté et les valeurs. Ex. : « single hop gauche 180 droite 168 douleur 0 · side hop gauche 48 droite 41 · ACL-RSI 68 ».</p>
+        <textarea id="dic-g" placeholder="Touche ici, puis le micro du clavier pour dicter…"></textarea>
+        ${KBHINT}
         <div class="row" style="margin-top:8px"><button class="btn p sm" data-dicgo="">Remplir le bilan</button><button class="btn s sm" data-dicclear="dic-g">Effacer</button></div>
         <div class="dicrep" id="rep-g">${esc(lastRep[''] || '')}</div>
       </div>
@@ -873,7 +883,7 @@ function testCard(t, se, ev, j){
   const derived = k==='derived'||k==='score';
   return `<div class="test st-${RANK[r.statut]?r.statut:'x'}" id="card-${t.id}">
     <div class="hd"><h3>${esc(t.nom)}</h3>${!derived && fields.length ? `<button class="micb" data-mic="${t.id}" title="Remplir ce test à la voix">${MIC}</button>` : ''}<span class="stchip">${chip(r.statut)}</span></div>
-    ${!derived && fields.length ? `<div class="dic" id="dic-${t.id}" ${lastRep[t.id]?'':'hidden'}><textarea id="dicta-${t.id}" placeholder="Ex. : gauche 180 droite 168 douleur 0"></textarea><div class="row"><button class="micb" data-rec="dicta-${t.id}">${MIC} Dicter</button><button class="btn p sm" data-dicgo="${t.id}">Remplir ce test</button></div><div class="dicrep">${esc(lastRep[t.id]||'')}</div></div>` : ''}
+    ${!derived && fields.length ? `<div class="dic" id="dic-${t.id}" ${lastRep[t.id]?'':'hidden'}><textarea id="dicta-${t.id}" placeholder="Touche ici puis le micro du clavier. Ex. : gauche 180 droite 168 douleur 0"></textarea>${KBHINT}<div class="row"><button class="micb" data-rec="dicta-${t.id}">${MIC} Dicter</button><button class="btn p sm" data-dicgo="${t.id}">Remplir ce test</button></div><div class="dicrep">${esc(lastRep[t.id]||'')}</div></div>` : ''}
     <div class="pr">${esc(etTxt)}${bl?'':' · <b>non bloquant</b>'}${t.declenche_echange_si?' · score bas = échange joueur + médecin':''}${derived?' · calculé automatiquement':''}${protoTxt(t)?'<br>'+esc(protoTxt(t)):''}</div>
     ${fields.length ? `<div class="bd">${fields.map(s=>fieldHtml(t,s,v,ep_cote(se))).join('')}
       ${refs.length?`<div class="refbox"><b>Référence du joueur</b>${refs.map(x=>{ const rk = x.side ? x.key+'@'+ep_cote(se) : x.key; const val = RJ[rk]!=null && RJ[rk]!=='' ? RJ[rk] : (RJ[x.key]||''); return `<span>${esc(x.lab)}</span><input type="text" inputmode="decimal" class="n" data-ref="${rk}" value="${esc(val)}"><span class="unit">${esc(x.u||'')}</span>`; }).join('')}</div>`:''}
@@ -965,6 +975,7 @@ function vCarte(j){
   <div class="card" style="display:flex;gap:16px;align-items:center;margin-top:14px">${photoHtml(j,110)}<div><h1>${esc(nomJ(j))}</h1><div class="muted">${esc(c.poste_libelle||'')} · ${esc((GROUPES.find(g=>g[0]===j.groupe)||[,''])[1])} · né le ${fdate(j.naissance)}${age!=null?` (${age} ans)`:''}</div>
     <div class="row" style="gap:4px;margin-top:8px">${(c.prioritaires||[]).filter(z=>!/indisponible/i.test(z)).map(z=>chip('rouge',z)).join('')}${(c.surveiller||[]).map(z=>chip('orange',z)).join('')}</div></div></div>
   ${(c.alertes||[]).length?`<div class="card small">${c.alertes.map(a=>`<div>⚠ ${esc(a)}</div>`).join('')}</div>`:''}
+  ${blocBlessuresJoueur(j)}
   <div class="secbar"><h2>Antécédents</h2></div>
   <div class="card">${(c.antecedents||[]).length ? c.antecedents.map(a=>chip('dark',a)).join(' ') : '<span class="muted">Aucun antécédent notable</span>'}</div>
   <div class="secbar"><h2>Statut par zone</h2></div>
@@ -1003,19 +1014,185 @@ async function importCartes(data){
   return {cree, maj, n:data.cartes.length};
 }
 
+/* ============ SUIVI DES BLESSURES (registre du rapport mensuel) ============ */
+const TEAM_GREY = {U17:'#b5b5b5', U19:'#6f6f6f', R1:'#111'};
+const FAM_ORDER = ['Première blessure','Récidive','Subséquente','Antérieure au suivi'];
+const pct = (x, d=0) => x==null ? '–' : fmt(x*100, d)+' %';
+const lev = (a,b) => { const m=a.length, n=b.length; if(!m||!n) return 0; const dp=Array.from({length:m+1},(_,i)=>[i,...Array(n).fill(0)]); for(let j=1;j<=n;j++) dp[0][j]=j; for(let i=1;i<=m;i++) for(let j=1;j<=n;j++) dp[i][j]=Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(a[i-1]===b[j-1]?0:1)); return 1-dp[m][n]/Math.max(m,n); };
+/* Associe un nom du registre à un joueur de l'application (nom exact, sinon même initiale + nom de famille proche) */
+function matchJoueur(nom){
+  const k = nkey(nom);
+  let j = db.joueurs.find(x=>nkey(x.prenom+x.nom)===k || nkey(x.nom+x.prenom)===k);
+  if(j) return j;
+  const toks = String(nom).replace(/\(.*?\)/g,'').trim().split(/\s+/).map(nkey).filter(Boolean);
+  if(toks.length<2) return null;
+  const ini = toks[0][0], rest = toks.slice(1);
+  let best=null, bs=0, second=0;
+  for(const x of db.joueurs){
+    if(nkey(x.prenom)[0]!==ini) continue;
+    const xt = String(x.nom).split(/[\s-]+/).map(nkey).filter(t=>t.length>1);
+    const s = Math.max(0, ...rest.flatMap(a=>xt.map(b=>lev(a,b))));
+    if(s>bs){ second=bs; bs=s; best=x; } else if(s>second) second=s;
+  }
+  return (best && bs>=0.75 && bs-second>=0.1) ? best : null;
+}
+function blessMap(){ const B=db.blessures; if(!B) return {}; const m={}; for(const nom of Object.keys(B.joueurs)){ const j=matchJoueur(nom); if(j) m[nom]=j.id; } return m; }
+function nomRegistreDe(jid){ const B=db.blessures; if(!B) return null; const m=blessMap(); return Object.keys(m).find(n=>m[n]===jid) || null; }
+function bars(rows, opts={}){
+  const max = Math.max(1, ...rows.map(r=>r.v));
+  return `<div class="bars">${rows.map(r=>`<div class="bar"><span class="bl">${esc(r.l)}</span><span class="bt"><i style="width:${(r.v/max*100).toFixed(1)}%;background:${r.c||'#111'}"></i></span><span class="bv">${esc(r.t!=null?r.t:fmt(r.v))}</span></div>`).join('')}</div>`;
+}
+let filtreB = {eq:'', q:'', vue:'tdb'};
+function vBlessures(){
+  nav('b');
+  const B = db.blessures;
+  if(!B){ $('#main').innerHTML = `<div class="secbar"><h2>Suivi des blessures</h2></div><div class="empty">Aucune donnée. Le rapport mensuel produit le fichier <b>blessures-app-AAAA-MM.json</b> (dossier Data blessures 2026-27 → rapports → mois). Transfère-le sur l'iPad puis : Sauvegarde et réglages → « Importer les données blessures ».</div>`; return; }
+  const eq = filtreB.eq, K = B.indicateurs[eq||'Total'];
+  const I = B.blessures.filter(b=>!eq || b.equipe===eq);
+  const sub = `<div class="row" style="margin:6px 0 4px"><a class="btn sm ${filtreB.vue==='tdb'?'p':'s'}" href="#/blessures">Tableau de bord saison</a><a class="btn sm ${filtreB.vue==='joueurs'?'p':'s'}" href="#/blessures/joueurs">Historique par joueur</a><span class="sp" style="flex:1"></span>
+    <select id="beq"><option value="">Toutes les équipes</option>${B.equipes.map(e=>`<option ${eq===e?'selected':''}>${e}</option>`).join('')}</select></div>
+    <p class="small muted" style="margin:4px 0 10px">Saison ${esc(B.saison)} · du ${fdate(B.debut)} au ${fdate(B.fin)} (${B.periode_jours} jours) · registre des blessures, rapport ${esc(B.mois)} · mêmes calculs que le tableau de bord mensuel.</p>`;
+  if(filtreB.vue==='joueurs') return vBlessuresJoueurs(B, sub);
+  const reg = {}; for(const b of I){ const r=reg[b.region_det]=reg[b.region_det]||{n:0,j:0}; r.n++; r.j+=b.jours||0; }
+  const regRows = Object.entries(reg).sort((a,b)=>b[1].n-a[1].n);
+  const totN = I.length||1, totJ = I.reduce((s,b)=>s+(b.jours||0),0)||1;
+  const ch = I.filter(b=>/^Cheville/.test(b.region_det));
+  const chCats = {}; for(const b of ch){ (chCats[b.region_det]=chCats[b.region_det]||[]).push(b); }
+  const med = a => { const s=a.filter(x=>x!=null).sort((x,y)=>x-y); if(!s.length) return null; const m=Math.floor(s.length/2); return s.length%2?s[m]:(s[m-1]+s[m])/2; };
+  const nat = {}; for(const b of I){ const r=nat[b.nature]=nat[b.nature]||{n:0,j:0}; r.n++; r.j+=b.jours||0; }
+  const fam = {}; for(const b of I) fam[b.famille]=(fam[b.famille]||0)+1;
+  const teams = eq ? [eq] : B.equipes;
+  const maxM = Math.max(1, ...B.par_mois.map(m=>teams.reduce((s,t)=>s+(m['jours_'+t]||0),0)));
+  const rec = I.filter(b=>b.famille==='Récidive');
+  const cours = I.filter(b=>b.en_cours);
+  const top = Object.entries(B.joueurs).filter(([n,v])=>(!eq||v.equipe===eq) && v.jours>0).sort((a,b)=>b[1].jours-a[1].jours).slice(0,10);
+  const M = blessMap();
+  const lienJ = n => `<a href="#/histo/${encodeURIComponent(n)}">${esc(n)}</a>`;
+  const MOISL = ['jan','fév','mars','avr','mai','juin','juil','août','sept','oct','nov','déc'];
+  $('#main').innerHTML = `<div class="secbar"><h2>Suivi des blessures</h2></div>${sub}
+  <div class="kpi">
+    <div><b>${K['Blessures (time-loss)']}</b><span>Blessures</span></div>
+    <div><b>${K['Joueurs blessés']}</b><span>Joueurs blessés · ${pct(K["% de l'effectif blessé"])} de l'effectif</span></div>
+    <div><b>${K["Jours d'indisponibilité"]}</b><span>Jours d'indisponibilité · médiane ${fmt(K['Durée médiane (j)'])} j</span></div>
+    <div><b>${K['Matchs manqués (joueur-matchs)']}</b><span>Matchs manqués (joueur-matchs)</span></div>
+    <div><b>${pct(K['% récidives'])}</b><span>Récidives · 1res blessures ${pct(K['% premières blessures'])}</span></div>
+    <div><b>${K['Blessures en cours']}</b><span>En cours au ${fdate(B.fin)}</span></div>
+    <div><b>${pct(K["Disponibilité moyenne de l'effectif"])}</b><span>Disponibilité de l'effectif</span></div>
+  </div>
+  <div class="secbar"><h2>Indicateurs par équipe</h2></div>
+  <div style="overflow-x:auto"><table class="l"><thead><tr><th>Indicateur</th>${B.equipes.map(e=>`<th>${e}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+  ${Object.keys(B.indicateurs.Total).map(k=>`<tr><td>${esc(k)}</td>${[...B.equipes,'Total'].map(e=>{ const v=B.indicateurs[e][k]; const isP=/^%|Disponibilit/.test(k); return `<td>${isP?pct(v):(Number.isInteger(v)?v:fmt(v,1))}</td>`; }).join('')}</tr>`).join('')}
+  </tbody></table></div>
+  <div class="zgrid" style="margin-top:14px">
+    <div class="card"><h3 style="font-size:18px">% des blessures par région</h3>${bars(regRows.map(([l,r])=>({l, v:r.n, t:`${r.n} · ${fmt(r.n/totN*100,0)} %`})))}</div>
+    <div class="card"><h3 style="font-size:18px">Jours perdus par région</h3>${bars([...regRows].sort((a,b)=>b[1].j-a[1].j).map(([l,r])=>({l, v:r.j, t:`${r.j} j · ${fmt(r.j/totJ*100,0)} %`, c:'#555'})))}</div>
+  </div>
+  <div class="secbar"><h2>Focus cheville / pied</h2></div>
+  ${ch.length?`<div style="overflow-x:auto"><table class="l"><thead><tr><th>Sous-catégorie</th><th>Blessures</th><th>% cheville/pied</th><th>Jours perdus</th><th>Durée médiane</th><th>Matchs manqués</th><th>Joueurs</th></tr></thead><tbody>${Object.entries(chCats).sort((a,b)=>b[1].length-a[1].length).map(([c,L])=>`<tr><td><b>${esc(c.replace(/^Cheville( \/ pied)? – /,''))}</b></td><td>${L.length}</td><td>${fmt(L.length/ch.length*100,0)} %</td><td>${L.reduce((s,b)=>s+(b.jours||0),0)} j</td><td>${fmt(med(L.map(b=>b.jours)))} j</td><td>${L.reduce((s,b)=>s+(b.matchs||0),0)}</td><td class="small">${[...new Set(L.map(b=>b.joueur))].map(lienJ).join(', ')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty small">Aucune blessure cheville / pied.</div>'}
+  <div class="zgrid" style="margin-top:14px">
+    <div class="card"><h3 style="font-size:18px">Nature des lésions</h3>${bars(Object.entries(nat).sort((a,b)=>b[1].n-a[1].n).map(([l,r])=>({l, v:r.n, t:`${r.n} · ${r.j} j`})))}</div>
+    <div class="card"><h3 style="font-size:18px">Jours perdus par mois</h3>
+      <div class="bars">${B.par_mois.map(m=>{ const [y,mo]=m.mois.split('-'); const tot=teams.reduce((s,t)=>s+(m['jours_'+t]||0),0); return `<div class="bar"><span class="bl">${MOISL[Number(mo)-1]} ${y.slice(2)}</span><span class="bt">${teams.map(t=>`<i style="width:${((m['jours_'+t]||0)/maxM*100).toFixed(1)}%;background:${TEAM_GREY[t]}"></i>`).join('')}</span><span class="bv">${tot} j · ${teams.reduce((s,t)=>s+(m['new_'+t]||0),0)} nouv.</span></div>`; }).join('')}</div>
+      ${eq?'':`<div class="row small muted" style="margin-top:6px">${B.equipes.map(t=>`<span><i style="display:inline-block;width:12px;height:12px;background:${TEAM_GREY[t]};border-radius:3px;vertical-align:middle"></i> ${t}</span>`).join(' ')}</div>`}</div>
+  </div>
+  <div class="zgrid" style="margin-top:14px">
+    <div class="card"><h3 style="font-size:18px">Premières blessures, récidives, subséquentes</h3>${bars(FAM_ORDER.filter(f=>fam[f]).map(f=>({l:f, v:fam[f], t:`${fam[f]} · ${fmt(fam[f]/totN*100,0)} %`})))}
+      <p class="small muted">Récidive = même région, même côté, même nature qu'une blessure précédente (≤ 2 mois après le retour = précoce). Subséquente = autre site ou autre type.</p></div>
+    <div class="card"><h3 style="font-size:18px">Récidives : détail</h3>${rec.length?`<ul class="miss">${rec.map(b=>`<li><span><b>${lienJ(b.joueur)}</b> · ${esc(b.region_det)} ${esc(b.cote||'')}<br><span class="muted">${fdate(b.debut)} · ${esc(b.type)} · ${b.jours!=null?b.jours+' j':'durée ?'}</span></span></li>`).join('')}</ul>`:'<p class="small muted">Aucune récidive.</p>'}</div>
+  </div>
+  <div class="zgrid" style="margin-top:14px">
+    <div class="card"><h3 style="font-size:18px">Blessures en cours</h3>${cours.length?`<ul class="miss">${cours.map(b=>`<li><span><b>${lienJ(b.joueur)}</b> (${esc(b.equipe)}) · ${esc(b.region_det)} ${esc(b.cote||'')}<br><span class="muted">depuis le ${fdate(b.debut)} · ${b.jours} j · ${esc(b.diag)}</span></span></li>`).join('')}</ul>`:'<p class="small muted">Aucune.</p>'}</div>
+    <div class="card"><h3 style="font-size:18px">Joueurs les plus impactés</h3>${bars(top.map(([n,v])=>({l:n, v:v.jours, t:`${v.jours} j · ${v.blessures} bless.`, c:TEAM_GREY[v.equipe]})))}</div>
+  </div>
+  ${(()=>{ const un=Object.keys(B.joueurs).filter(n=>!M[n] && B.joueurs[n].blessures); return un.length?`<p class="small muted" style="margin-top:14px">Joueurs du registre sans fiche dans l'application (historique consultable, pas de lien avec les bilans RTP) : ${un.map(lienJ).join(', ')}.</p>`:''; })()}`;
+  $('#beq').onchange = e=>{ filtreB.eq=e.target.value; vBlessures(); };
+}
+function vBlessuresJoueurs(B, sub){
+  const eq=filtreB.eq;
+  const L = Object.entries(B.joueurs).filter(([n,v])=>(!eq||v.equipe===eq) && (!filtreB.q || n.toLowerCase().includes(filtreB.q.toLowerCase()))).sort((a,b)=>b[1].jours-a[1].jours || a[0].localeCompare(b[0]));
+  const M = blessMap();
+  $('#main').innerHTML = `<div class="secbar"><h2>Suivi des blessures</h2></div>${sub}
+  <input type="search" id="bq" placeholder="Rechercher un joueur" value="${esc(filtreB.q)}" style="width:100%;margin-bottom:10px">
+  <div style="overflow-x:auto"><table class="l"><thead><tr><th>Joueur</th><th>Équipe</th><th>Blessures</th><th>Récidives</th><th>Jours indispo</th><th>Matchs manqués</th><th>Disponibilité</th><th>En cours</th><th>Région principale</th></tr></thead><tbody>
+  ${L.map(([n,v])=>`<tr class="click" data-go="#/histo/${encodeURIComponent(n)}"><td><div class="row" style="gap:8px;flex-wrap:nowrap">${M[n]?photoHtml(getJ(M[n]),34):''}<b>${esc(n)}</b></div></td><td>${esc(v.equipe)}</td><td>${v.blessures}</td><td>${v.recidives}</td><td>${v.jours}</td><td>${v.matchs} / ${v.matchs_equipe}</td><td>${pct(v.dispo,1)}</td><td>${v.en_cours?chip('dark',v.en_cours):'–'}</td><td class="small">${esc(v.region_principale||'–')}</td></tr>`).join('')}
+  </tbody></table></div>`;
+  $('#beq').onchange = e=>{ filtreB.eq=e.target.value; vBlessures(); };
+  $('#bq').oninput = e=>{ filtreB.q=e.target.value; const p=e.target.selectionStart; vBlessures(); const q=$('#bq'); q.focus(); q.setSelectionRange(p,p); };
+  bindGo(); loadPhotos();
+}
+function vHisto(nom){
+  nav('b');
+  const B=db.blessures, v=B.joueurs[nom]; const L=B.blessures.filter(b=>b.joueur===nom);
+  const jid = blessMap()[nom]; const j = jid ? getJ(jid) : null;
+  const reg={}; for(const b of L) reg[b.region_det]=(reg[b.region_det]||0)+1;
+  const eps = j ? db.episodes.filter(e=>e.joueurId===j.id) : [];
+  $('#main').innerHTML = `
+  <div class="row"><a href="#/blessures/joueurs" class="btn s sm">← Historique par joueur</a>${j?`<a href="#/joueur/${j.id}" class="btn s sm">Bilans RTP du joueur</a>${(db.cartes||{})[j.id]?`<a href="#/carte/${j.id}" class="btn s sm">Carte médicale</a>`:''}`:''}</div>
+  <div class="card" style="display:flex;gap:16px;align-items:center;margin-top:14px">${j?photoHtml(j,90):''}<div><h1>${esc(j?nomJ(j):nom)}</h1><div class="muted">${esc(v.equipe)} · ${esc(v.groupe||'')} · saison ${esc(B.saison)} · du ${fdate(B.debut)} au ${fdate(B.fin)}</div></div></div>
+  <div class="kpi" style="margin-top:10px">
+    <div><b>${v.blessures}</b><span>Blessures</span></div>
+    <div><b>${v.jours}</b><span>Jours d'indisponibilité</span></div>
+    <div><b>${v.matchs} / ${v.matchs_equipe}</b><span>Matchs manqués / matchs de l'équipe</span></div>
+    <div><b>${pct(v.dispo,1)}</b><span>Disponibilité</span></div>
+    <div><b>${v.en_cours}</b><span>En cours</span></div>
+    <div><b>${v.plus_longue} j</b><span>Plus longue absence</span></div>
+  </div>
+  <div class="zgrid" style="margin-top:14px">
+    <div class="card"><h3 style="font-size:18px">Type de blessures</h3>${bars([['Premières blessures',v.premieres],['Récidives',v.recidives],['Subséquentes',v.subsequentes]].filter(x=>x[1]).map(([l,n])=>({l,v:n})))||'<p class="small muted">Aucune blessure.</p>'}</div>
+    <div class="card"><h3 style="font-size:18px">Régions</h3>${Object.keys(reg).length?bars(Object.entries(reg).sort((a,b)=>b[1]-a[1]).map(([l,n])=>({l,v:n,c:'#555'}))):'<p class="small muted">Aucune.</p>'}<p class="small muted">Région principale : ${esc(v.region_principale||'–')}</p></div>
+  </div>
+  <div class="secbar"><h2>Historique de la saison</h2></div>
+  ${L.length?`<div style="overflow-x:auto"><table class="l"><thead><tr><th>Début</th><th>Retour</th><th>Jours</th><th>Matchs</th><th>Région</th><th>Nature</th><th>Diagnostic</th><th>Contexte</th><th>Type</th><th>Statut du retour</th></tr></thead><tbody>
+  ${[...L].reverse().map(b=>`<tr><td>${fdate(b.debut)}</td><td>${b.retour?fdate(b.retour):(b.en_cours?chip('dark','en cours'):'–')}</td><td>${b.jours!=null?b.jours:'?'}<div class="small muted">${esc(b.gravite||'')}</div></td><td>${b.matchs!=null?b.matchs:'?'}</td><td>${esc(b.region_det)} ${esc(b.cote||'')}</td><td class="small">${esc(b.nature)}</td><td class="small">${esc(b.diag)}</td><td class="small">${esc(b.contexte)}</td><td class="small">${esc(b.type)}</td><td class="small">${esc(b.statut)}</td></tr>`).join('')}
+  </tbody></table></div>`:'<div class="empty">Aucune blessure enregistrée cette saison.</div>'}
+  ${j?`<div class="secbar"><h2>Bilans RTP dans l'application</h2></div>${eps.length?`<table class="l"><tbody>${eps.map(e=>`<tr class="click" data-go="#/episode/${e.id}"><td><b>${CAT_LAB[e.categorie]}</b> ${e.cote==='G'?'gauche':'droit'}</td><td>${fdate(e.dateBlessure)}</td><td>étape ${e.etapeActuelle||0} · ${esc(ETAPES[e.etapeActuelle||0])}</td></tr>`).join('')}</tbody></table>`:'<div class="empty small">Aucun bilan RTP saisi pour ce joueur.</div>'}`:''}
+  <p class="small muted" style="margin-top:12px">Source : registre des blessures (rapport ${esc(B.mois)}). Durée d'absence = du jour de la blessure au retour à l'entraînement complet (consensus IOC 2020).</p>`;
+  bindGo(); loadPhotos();
+}
+function blocBlessuresJoueur(j){
+  const B=db.blessures; if(!B) return '';
+  const nom=nomRegistreDe(j.id); if(!nom) return '';
+  const v=B.joueurs[nom];
+  return `<div class="secbar"><h2>Saison ${esc(B.saison)} · registre</h2><span class="sp"></span><a class="btn s sm" href="#/histo/${encodeURIComponent(nom)}">Historique complet</a></div>
+  <div class="kpi"><div><b>${v.blessures}</b><span>Blessures</span></div><div><b>${v.jours}</b><span>Jours d'indisponibilité</span></div><div><b>${v.matchs} / ${v.matchs_equipe}</b><span>Matchs manqués</span></div><div><b>${pct(v.dispo,1)}</b><span>Disponibilité</span></div><div><b>${esc(v.region_principale||'–')}</b><span>Région principale</span></div></div>`;
+}
+function importBlessures(d){
+  if(!d || d.type!=='rtp-amiens-sc-blessures' || !Array.isArray(d.blessures)) throw new Error('format');
+  db.blessures = d; saveNow();
+  const m = blessMap(); const n = Object.keys(d.joueurs).length;
+  return {blessures:d.blessures.length, joueurs:n, lies:Object.keys(m).length, mois:d.mois};
+}
+
 /* ============ DICTÉE VOCALE ============ */
-const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SR_API = window.SpeechRecognition || window.webkitSpeechRecognition;
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const STANDALONE = navigator.standalone===true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+let SR_KO = false; try{ SR_KO = localStorage.getItem('rtp-sr-ko')==='1'; }catch(e){}
+/* Sur iPad, la reconnaissance vocale du navigateur ne fonctionne pas dans une application installée sur l'écran d'accueil : on utilise alors la dictée du clavier. */
+const SR = (SR_API && !(IS_IOS && STANDALONE) && !SR_KO) ? SR_API : null;
+function dicteeClavier(ta, msg){
+  ta.focus();
+  const hint = ta.parentElement.querySelector('.kbhint');
+  if(hint){ hint.hidden=false; if(msg) hint.textContent = msg; }
+  toast('Touche le micro du clavier pour dicter');
+}
+const KBHINT = `<div class="kbhint small" ${SR?'hidden':''} style="background:#f1f1f1;border-radius:8px;padding:8px 10px;color:#333">🎤 Dictée par le clavier : touche la zone de texte, puis le <b>micro en bas à droite du clavier</b>, parle, puis touche « Remplir ». Si le micro n'apparaît pas : Réglages de l'iPad → Général → Clavier → <b>Activer la dictée</b>.</div>`;
 const MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 let rec = null;
 function toggleRec(ta, btn){
   if(rec){ try{ rec.stop(); }catch(e){} return; }
-  if(!SR){ toast('Touche la zone de texte puis le micro du clavier'); ta.focus(); return; }
+  if(!SR){ dicteeClavier(ta); return; }
   rec = new SR(); rec.lang='fr-FR'; rec.continuous=true; rec.interimResults=true;
   const base = ta.value ? ta.value.trim()+' ' : '';
-  rec.onresult = e => { let fin='', tmp=''; for(let i=0;i<e.results.length;i++){ const tr=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=tr+' '; else tmp+=tr; } ta.value = base + fin + tmp; };
-  rec.onerror = e => { toast(e.error==='not-allowed' ? 'Autorise le micro pour cette application' : 'Micro : '+e.error); };
-  rec.onend = () => { rec=null; btn.classList.remove('on'); btn.innerHTML = MIC+' Dicter'; };
-  try{ rec.start(); btn.classList.add('on'); btn.innerHTML = MIC+' Stop'; }catch(err){ rec=null; toast('Impossible de démarrer le micro'); }
+  let gotText = false;
+  rec.onresult = e => { let fin='', tmp=''; for(let i=0;i<e.results.length;i++){ const tr=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=tr+' '; else tmp+=tr; } ta.value = base + fin + tmp; if((fin+tmp).trim()) gotText=true; };
+  rec.onerror = e => {
+    if(e.error==='no-speech' || e.error==='aborted') return;
+    SR_KO = true; try{ localStorage.setItem('rtp-sr-ko','1'); }catch(_){}
+    dicteeClavier(ta, e.error==='not-allowed' ? 'Micro refusé pour cette application : utilise le micro du clavier (en bas à droite).' : 'Dictée directe indisponible ici : utilise le micro du clavier (en bas à droite).');
+  };
+  rec.onend = () => { rec=null; btn.classList.remove('on'); btn.innerHTML = MIC+' Dicter'; if(!gotText && !ta.value.trim()) dicteeClavier(ta); };
+  try{ rec.start(); btn.classList.add('on'); btn.innerHTML = MIC+' Stop'; }catch(err){ rec=null; SR_KO=true; dicteeClavier(ta); }
 }
 const NUMW = {zero:0,un:1,une:1,deux:2,trois:3,quatre:4,cinq:5,six:6,sept:7,huit:8,neuf:9,dix:10,onze:11,douze:12,treize:13,quatorze:14,quinze:15,seize:16,vingt:20,vingts:20,trente:30,quarante:40,cinquante:50,soixante:60,cent:100,cents:100};
 function nrm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/(\d),(\d)/g,'$1.$2').replace(/[’'`\-_/:;]/g,' ').replace(/[^a-z0-9. ]/g,' ').replace(/\.(?!\d)/g,' ').replace(/\s+/g,' ').trim(); }
@@ -1150,6 +1327,12 @@ function vReglages(){
     <label class="btn p" style="display:inline-flex;align-items:center">Importer les cartes médicales<input type="file" id="impC" accept="application/json,.json" style="display:none"></label>
     <p class="small muted">${Object.keys(db.cartes||{}).length} cartes médicales enregistrées sur cet iPad.</p>
   </div>
+  <div class="secbar"><h2>Données blessures de la saison</h2></div>
+  <div class="card">
+    <p style="margin-top:0">Importe le fichier <b>blessures-app-AAAA-MM.json</b> produit par le rapport mensuel (Mac : Data blessures 2026-27 → rapports → mois, transféré par AirDrop). Il remplace les données du mois précédent. Le registre du Mac reste la seule source des statistiques.</p>
+    <label class="btn p" style="display:inline-flex;align-items:center">Importer les données blessures<input type="file" id="impB" accept="application/json,.json" style="display:none"></label>
+    <p class="small muted">${db.blessures?`Rapport ${esc(db.blessures.mois)} · ${db.blessures.blessures.length} blessures · arrêté au ${fdate(db.blessures.fin)} · ${Object.keys(blessMap()).length} joueurs du registre reliés à une fiche de l'application`:'Aucune donnée blessures importée.'}</p>
+  </div>
   <div class="secbar"><h2>Référentiels</h2></div>
   <table class="l"><thead><tr><th>Bilan</th><th>Version</th><th>Validé le</th><th>Tests</th></tr></thead><tbody>${CATS.map(c=>`<tr><td>${CAT_LAB[c]}</td><td>${esc(REFS[c].version)}</td><td>${fdate(REFS[c].date_validation)}</td><td>${REFS[c].tests.length}</td></tr>`).join('')}</tbody></table>
   <div class="secbar"><h2>Essai</h2></div>
@@ -1158,8 +1341,9 @@ function vReglages(){
   <button class="btn d sm" id="wipe">Effacer toutes les données de cet iPad</button>`;
   try{ if(navigator.storage && navigator.storage.persisted) navigator.storage.persisted().then(p=>{ $('#persist').textContent = p ? 'Stockage protégé : l’iPad ne supprimera pas ces données de lui-même.' : 'Stockage non garanti par le navigateur : utilise l’application depuis l’icône de l’écran d’accueil et fais des sauvegardes régulières.'; }); else $('#persist').textContent=''; }catch(e){ $('#persist').textContent=''; }
   $('#impC').onchange = e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=async ()=>{ try{ const r=await importCartes(JSON.parse(rd.result)); toast(`${r.n} cartes importées · ${r.cree} joueurs créés · ${r.maj} complétés`); go('#/cartes'); }catch(err){ toast('Fichier de cartes médicales invalide'); } }; rd.readAsText(f); };
+  $('#impB').onchange = e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ const r=importBlessures(JSON.parse(rd.result)); toast(`Rapport ${r.mois} : ${r.blessures} blessures · ${r.lies}/${r.joueurs} joueurs reliés`); go('#/blessures'); }catch(err){ toast('Fichier blessures invalide'); } }; rd.readAsText(f); };
   $('#exp').onclick = async ()=>{ const files={}; try{ for(const k of await IDB.keys()){ const v=await IDB.get(k); if(typeof v==='string') files[k]={s:v}; else if(v && v.buf) files[k]={name:v.name, type:v.type, b64:buf2b64(v.buf)}; } }catch(err){} const blob=new Blob([JSON.stringify({...db, __files:files})],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`rtp-amiens-sc-sauvegarde-${today()}.json`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000); toast('Sauvegarde exportée'); };
-  $('#imp').onchange = e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=async ()=>{ try{ const d=JSON.parse(rd.result); if(d && d.type==='rtp-amiens-sc-cartes-medicales'){ const r=await importCartes(d); toast(`${r.n} cartes importées`); go('#/cartes'); return; } if(!d || !Array.isArray(d.joueurs) || !Array.isArray(d.episodes) || !Array.isArray(d.seances)) throw new Error('format'); const files=d.__files||{}; delete d.__files; for(const [k,v] of Object.entries(files)){ try{ await IDB.put(k, v.s!=null ? v.s : {name:v.name, type:v.type, buf:b642buf(v.b64)}); }catch(_){} } for(const k in PHOTOS) delete PHOTOS[k]; db=Object.assign(blank(), d); saveNow(); toast('Sauvegarde restaurée'); vReglages(); }catch(err){ toast('Fichier de sauvegarde invalide'); } }; rd.readAsText(f); };
+  $('#imp').onchange = e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=async ()=>{ try{ const d=JSON.parse(rd.result); if(d && d.type==='rtp-amiens-sc-blessures'){ const r=importBlessures(d); toast(`Rapport ${r.mois} importé`); go('#/blessures'); return; } if(d && d.type==='rtp-amiens-sc-cartes-medicales'){ const r=await importCartes(d); toast(`${r.n} cartes importées`); go('#/cartes'); return; } if(!d || !Array.isArray(d.joueurs) || !Array.isArray(d.episodes) || !Array.isArray(d.seances)) throw new Error('format'); const files=d.__files||{}; delete d.__files; for(const [k,v] of Object.entries(files)){ try{ await IDB.put(k, v.s!=null ? v.s : {name:v.name, type:v.type, buf:b642buf(v.b64)}); }catch(_){} } for(const k in PHOTOS) delete PHOTOS[k]; db=Object.assign(blank(), d); saveNow(); toast('Sauvegarde restaurée'); vReglages(); }catch(err){ toast('Fichier de sauvegarde invalide'); } }; rd.readAsText(f); };
   $('#demo').onclick = ()=>{ demo(); saveNow(); toast('Joueurs fictifs ajoutés'); go('#/episodes'); };
   $('#demoDel').onclick = ()=>{ const ids=db.joueurs.filter(j=>j.demo).map(j=>j.id); const eids=db.episodes.filter(e=>ids.includes(e.joueurId)).map(e=>e.id); db.seances=db.seances.filter(s=>!eids.includes(s.episodeId)); db.episodes=db.episodes.filter(e=>!ids.includes(e.joueurId)); ids.forEach(i=>delete db.refs[i]); db.joueurs=db.joueurs.filter(j=>!j.demo); saveNow(); toast('Joueurs fictifs supprimés'); vReglages(); };
   confirm2($('#wipe'), async ()=>{ try{ for(const k of await IDB.keys()) await IDB.del(k); }catch(_){} for(const k in PHOTOS) delete PHOTOS[k]; db=blank(); saveNow(); toast('Toutes les données ont été effacées'); vReglages(); });
