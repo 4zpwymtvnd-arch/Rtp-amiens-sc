@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="RTP Amiens SC">
 <meta name="theme-color" content="#000000">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icone-asc-180.png">
 <title>RTP Amiens SC</title>
 <style>
 :root{
@@ -765,8 +765,7 @@ function vSeance(se){
       <p class="small muted" style="margin:10px 0 0">Côté lésé : <b>${lese==='G'?'gauche':'droit'}</b> (repéré en noir). Douleur non renseignée = 0. Tout est enregistré automatiquement sur cet iPad.</p></div>
       <div class="card">
         <div class="row"><h3 style="font-size:19px;flex:1">Dictée du bilan</h3><button class="micb" data-rec="dic-g">${MIC} Dicter</button></div>
-        <p class="small muted" style="margin:6px 0">Dis le nom du test, puis le côté et les valeurs. Ex. : « single hop gauche 180 droite 168 douleur 0 · side hop gauche 48 droite 41 · ACL-RSI 68 ».</p>
-        <textarea id="dic-g" placeholder="Touche ici, puis le micro du clavier pour dicter…"></textarea>
+        <textarea id="dic-g" placeholder="Ex. : single hop gauche 180 droite 168 douleur 0 · side hop gauche 48 droite 41"></textarea>
         ${KBHINT}
         <div class="row" style="margin-top:8px"><button class="btn p sm" data-dicgo="">Remplir le bilan</button><button class="btn s sm" data-dicclear="dic-g">Effacer</button></div>
         <div class="dicrep" id="rep-g">${esc(lastRep[''] || '')}</div>
@@ -883,7 +882,7 @@ function testCard(t, se, ev, j){
   const derived = k==='derived'||k==='score';
   return `<div class="test st-${RANK[r.statut]?r.statut:'x'}" id="card-${t.id}">
     <div class="hd"><h3>${esc(t.nom)}</h3>${!derived && fields.length ? `<button class="micb" data-mic="${t.id}" title="Remplir ce test à la voix">${MIC}</button>` : ''}<span class="stchip">${chip(r.statut)}</span></div>
-    ${!derived && fields.length ? `<div class="dic" id="dic-${t.id}" ${lastRep[t.id]?'':'hidden'}><textarea id="dicta-${t.id}" placeholder="Touche ici puis le micro du clavier. Ex. : gauche 180 droite 168 douleur 0"></textarea>${KBHINT}<div class="row"><button class="micb" data-rec="dicta-${t.id}">${MIC} Dicter</button><button class="btn p sm" data-dicgo="${t.id}">Remplir ce test</button></div><div class="dicrep">${esc(lastRep[t.id]||'')}</div></div>` : ''}
+    ${!derived && fields.length ? `<div class="dic" id="dic-${t.id}" ${lastRep[t.id]?'':'hidden'}><textarea id="dicta-${t.id}" placeholder="Ex. : gauche 180 droite 168 douleur 0"></textarea>${KBHINT}<div class="row"><button class="micb" data-rec="dicta-${t.id}">${MIC} Dicter</button><button class="btn p sm" data-dicgo="${t.id}">Remplir ce test</button></div><div class="dicrep">${esc(lastRep[t.id]||'')}</div></div>` : ''}
     <div class="pr">${esc(etTxt)}${bl?'':' · <b>non bloquant</b>'}${t.declenche_echange_si?' · score bas = échange joueur + médecin':''}${derived?' · calculé automatiquement':''}${protoTxt(t)?'<br>'+esc(protoTxt(t)):''}</div>
     ${fields.length ? `<div class="bd">${fields.map(s=>fieldHtml(t,s,v,ep_cote(se))).join('')}
       ${refs.length?`<div class="refbox"><b>Référence du joueur</b>${refs.map(x=>{ const rk = x.side ? x.key+'@'+ep_cote(se) : x.key; const val = RJ[rk]!=null && RJ[rk]!=='' ? RJ[rk] : (RJ[x.key]||''); return `<span>${esc(x.lab)}</span><input type="text" inputmode="decimal" class="n" data-ref="${rk}" value="${esc(val)}"><span class="unit">${esc(x.u||'')}</span>`; }).join('')}</div>`:''}
@@ -1176,7 +1175,7 @@ function dicteeClavier(ta, msg){
   if(hint){ hint.hidden=false; if(msg) hint.textContent = msg; }
   toast('Touche le micro du clavier pour dicter');
 }
-const KBHINT = `<div class="kbhint small" ${SR?'hidden':''} style="background:#f1f1f1;border-radius:8px;padding:8px 10px;color:#333">🎤 Dictée par le clavier : touche la zone de texte, puis le <b>micro en bas à droite du clavier</b>, parle, puis touche « Remplir ». Si le micro n'apparaît pas : Réglages de l'iPad → Général → Clavier → <b>Activer la dictée</b>.</div>`;
+const KBHINT = '';
 const MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 let rec = null;
 function toggleRec(ta, btn){
